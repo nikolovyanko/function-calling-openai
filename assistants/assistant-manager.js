@@ -1,25 +1,24 @@
 import OpenAI from "openai";
-import { ASSISTANTS } from "../constants/assistants.js";
-import { runDefaultAssistant, initializeFloGeneral } from "./flo-general.js";
-import { runCakeOrderAssistant, initializeFloCakeOrder } from "./flo-cake-order.js";
+import { runDefaultAssistant, initializeFloGeneral, GENERAL_ASSISTANT } from "./flo-general-assistant.js";
+import { runCakeOrderAssistant, initializeFloCakeOrder, CAKE_ASSISTANT } from "./flo-cake-assistant.js";
 
 const iniOpenAiClient = () => {
     try {
-      const client = new OpenAI({ apiKey: process.env.OPEN_AI_API_KEY })
-      initializeFloGeneral(client);
-      initializeFloCakeOrder(client);
-      return client;
+        const client = new OpenAI({ apiKey: process.env.OPEN_AI_API_KEY })
+        initializeFloGeneral(client);
+        initializeFloCakeOrder(client);
+        return client;
     } catch (error) {
-      console.error("Failed to initialize OpenAI client:", error);
+        console.error("Failed to initialize OpenAI client:", error);
     }
-  }
-  const openaiClient = iniOpenAiClient();
+}
+const openaiClient = iniOpenAiClient();
 
 const messageAssistant = async (message, assistantId, thread) => {
     try {
         //pick the default assistant if assistantId is not provided
         if (!assistantId) {
-            assistantId = ASSISTANTS.FLO_GENERAL_KNOWLEDGE.id;
+            assistantId = GENERAL_ASSISTANT;
         }
         //Create a new thread if thread is not provided, pick the default assistant if assistantId is not provided
         if (!thread) {
@@ -34,41 +33,18 @@ const messageAssistant = async (message, assistantId, thread) => {
             content: message,
         });
 
-        //create a run 
-        let run = await openaiClient.beta.threads.runs
-            .create(thread, {
-                assistant_id: assistantId,
-            });
-
         //Pick an assistant based on the assistantId to handle the run
         switch (assistantId) {
-            case ASSISTANTS.FLO_CAKE_ORDER.id:
-                runCakeOrderAssistant(run, thread);
-                break;
+            case CAKE_ASSISTANT:
+                return await runCakeOrderAssistant(thread);
 
+            //The dafault assistant is the General Knowledge Flo assistant
             default:
-                await runDefaultAssistant(run, thread);
-                break;
+                return await runDefaultAssistant(thread);
         }
-        console.log("OUTSIDE" + run.status);
-
-        const messages = await openaiClient.beta.threads.messages.list(
-            thread,
-            run.id
-        );
-
-        const responseMessage = await messages.data[0].content[0].text.value;
-        console.log("INSIDE" + responseMessage);
-
-        return {
-            thread: thread,
-            assistantId: assistantId,
-            responseMessage: responseMessage
-        };
 
     } catch (error) {
         console.error(error);
-        console.log("INSIDE ERROR" + responseMessage);
         return {
             thread: thread,
             assistantId: assistantId,
@@ -78,28 +54,14 @@ const messageAssistant = async (message, assistantId, thread) => {
 };
 
 const deleteThreads = async (threads) => {
-
+    let responseMessage = "";
     for (const thread of threads) {
         await openaiClient.beta.threads.del(thread);
-
-        return "Threads deleted";
+        responseMessage += `Thread ${thread} deleted\n`;
+        
     }
+    return responseMessage;
 };
 
 
-const resolveThreadAndAssistantId = async (assistantId, thread) => {
-    if (!assistantId) {
-        assistantId = ASSISTANTS.FLO_GENERAL_KNOWLEDGE.id;
-    }
-
-    if (!thread) {
-        console.log("Creating a new thread");
-        const newThread = await openaiClient.beta.threads.create();
-        thread = newThread.id;
-        console.log(`Created thread: ${thread}`);
-    }
-    return { assistantId, thread };
-}
-
-
-export {deleteThreads, messageAssistant }; // Export the initialize function
+export { deleteThreads, messageAssistant }; // Export the initialize function

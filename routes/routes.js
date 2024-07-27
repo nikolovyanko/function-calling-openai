@@ -27,14 +27,18 @@ router.post("/message", async (req, res) => {
     let { message, assistantId, thread } = req.body;
 
     // Call messageAssistant and destructure the result
-    const { thread: newThread, assistantId: newAssistantId, responseMessage } = await messageAssistant(message, assistantId, thread);
-    const tst = "dsada";
-    console.log("dasda" + responseMessage);
-    
+    const {
+      thread: newThread,
+      assistantId: newAssistantId,
+      responseMessage } = await messageAssistant(message, assistantId, thread);
+
+      const regex = /【.*source】/g;
+      const response = responseMessage.replace(regex, '');
+      
     return res.json({
       thread: newThread,
       assistantId: newAssistantId,
-      responseMessage: responseMessage
+      responseMessage: response
     });
 
 
