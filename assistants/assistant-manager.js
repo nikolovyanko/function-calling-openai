@@ -1,18 +1,80 @@
-let openaiClient;
+import OpenAI from "openai";
+import { ASSISTANTS } from "../constants/assistants.js";
+import { runDefaultAssistant, initializeFloGeneral } from "./flo-general.js";
+import { runCakeOrderAssistant, initializeFloCakeOrder } from "./flo-cake-order.js";
 
-const initialize = (client) => {
-    openaiClient = client;
-};
+const iniOpenAiClient = () => {
+    try {
+      const client = new OpenAI({ apiKey: process.env.OPEN_AI_API_KEY })
+      initializeFloGeneral(client);
+      initializeFloCakeOrder(client);
+      return client;
+    } catch (error) {
+      console.error("Failed to initialize OpenAI client:", error);
+    }
+  }
+  const openaiClient = iniOpenAiClient();
 
+const messageAssistant = async (message, assistantId, thread) => {
+    try {
+        //pick the default assistant if assistantId is not provided
+        if (!assistantId) {
+            assistantId = ASSISTANTS.FLO_GENERAL_KNOWLEDGE.id;
+        }
+        //Create a new thread if thread is not provided, pick the default assistant if assistantId is not provided
+        if (!thread) {
+            const newThread = await openaiClient.beta.threads.create();
+            thread = newThread.id;
+            console.log(`Created thread: ${thread}`);
+        }
 
-const messageFlo = async (message, assistantId, flo_general_thread, flo_order_thread) => {
-    let thread;
+        // Create a message
+        await openaiClient.beta.threads.messages.create(thread, {
+            role: "user",
+            content: message,
+        });
 
-    ({ assistantId, thread } = resolveThreadAndAssistantId(
-        assistantId,
-        thread,
-        flo_general_thread,
-        flo_order_thread));
+        //create a run 
+        let run = await openaiClient.beta.threads.runs
+            .create(thread, {
+                assistant_id: assistantId,
+            });
+
+        //Pick an assistant based on the assistantId to handle the run
+        switch (assistantId) {
+            case ASSISTANTS.FLO_CAKE_ORDER.id:
+                runCakeOrderAssistant(run, thread);
+                break;
+
+            default:
+                await runDefaultAssistant(run, thread);
+                break;
+        }
+        console.log("OUTSIDE" + run.status);
+
+        const messages = await openaiClient.beta.threads.messages.list(
+            thread,
+            run.id
+        );
+
+        const responseMessage = await messages.data[0].content[0].text.value;
+        console.log("INSIDE" + responseMessage);
+
+        return {
+            thread: thread,
+            assistantId: assistantId,
+            responseMessage: responseMessage
+        };
+
+    } catch (error) {
+        console.error(error);
+        console.log("INSIDE ERROR" + responseMessage);
+        return {
+            thread: thread,
+            assistantId: assistantId,
+            responseMessage: "Sorry there was a problem executing your request, can you please try again?"
+        };
+    }
 };
 
 const deleteThreads = async (threads) => {
@@ -25,14 +87,19 @@ const deleteThreads = async (threads) => {
 };
 
 
-function resolveThreadAndAssistantId(assistantId, thread, flo_general_thread, flo_order_thread) {
+const resolveThreadAndAssistantId = async (assistantId, thread) => {
     if (!assistantId) {
-        thread = flo_general_thread;
         assistantId = ASSISTANTS.FLO_GENERAL_KNOWLEDGE.id;
-    } else {
-        thread = assistantId === ASSISTANTS.FLO_GENERAL_KNOWLEDGE.id ? flo_general_thread : flo_order_thread;
+    }
+
+    if (!thread) {
+        console.log("Creating a new thread");
+        const newThread = await openaiClient.beta.threads.create();
+        thread = newThread.id;
+        console.log(`Created thread: ${thread}`);
     }
     return { assistantId, thread };
 }
 
-export { initialize as initializeFloManager, deleteThreads }; // Export the initialize function
+
+export {deleteThreads, messageAssistant }; // Export the initialize function
