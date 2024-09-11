@@ -2,7 +2,7 @@ import express from "express";
 import { deleteThreads, messageAssistant } from "../assistants/assistant-manager.js";
 
 const router = express.Router();
-
+const regex = /【.*source】/g;
 router.delete("/threadDel", async (req, res) => {
   try {
     const threads = req.body.threads;
@@ -32,9 +32,9 @@ router.post("/message", async (req, res) => {
       assistantId: newAssistantId,
       responseMessage } = await messageAssistant(message, assistantId, thread);
 
-      const regex = /【.*source】/g;
+
       const response = responseMessage.replace(regex, '');
-      
+
     return res.json({
       thread: newThread,
       assistantId: newAssistantId,
